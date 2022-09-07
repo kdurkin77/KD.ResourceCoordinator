@@ -4,12 +4,14 @@
     <TargetFrameworks>net6.0;netstandard2.1;netstandard2.0;</TargetFrameworks>
     <WarnOn>3388;3389;3390</WarnOn>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Authors>kdurkin77;reed-adams</Authors>
     <PackageId>KD.ResourceCoordinator</PackageId>
-    <RepositoryUrl>https://github.com/kdurkin77/ResourceCoordinator</RepositoryUrl>
-    <PackageTags>Resource; Coordinator</PackageTags>
-    <Product>KD.ResourceCoordinator</Product>
     <Description>A library that coordinates resources to ensure they're used in sync</Description>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <Authors>kdurkin77;reed-adams</Authors>
+    <Product>KD.ResourceCoordinator</Product>
+    <RepositoryUrl>https://github.com/kdurkin77/ResourceCoordinator</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/kdurkin77/ResourceCoordinator</PackageProjectUrl>
+    <PackageTags>Resource; Coordinator</PackageTags>
     <PackageReleaseNotes>Initial Release</PackageReleaseNotes>
     <Version>1.0.0</Version>
   </PropertyGroup>
