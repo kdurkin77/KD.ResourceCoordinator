@@ -9,8 +9,8 @@
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <Authors>kdurkin77;reed-adams</Authors>
     <Product>KD.ResourceCoordinator</Product>
-    <RepositoryUrl>https://github.com/kdurkin77/ResourceCoordinator</RepositoryUrl>
-    <PackageProjectUrl>https://github.com/kdurkin77/ResourceCoordinator</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/kdurkin77/KD.ResourceCoordinator</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/kdurkin77/KD.ResourceCoordinator</PackageProjectUrl>
     <PackageTags>Resource; Coordinator</PackageTags>
     <PackageReleaseNotes>
     Added .NET 7 support
