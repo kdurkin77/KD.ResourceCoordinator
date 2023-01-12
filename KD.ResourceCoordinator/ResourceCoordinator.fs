@@ -16,13 +16,14 @@ type ResourceCoordinatorOptions<'TKey, 'TResource>() =
     member val OnRemove             = Unchecked.defaultof<Func<'TKey, 'TResource, Task>> with get, set
 
 
-type private CoordinatorMessage<'TKey, 'TResource> =
-    | AddResource          of 'TKey * 'TResource * AsyncReplyChannel<Result<unit, exn>>
-    | RemoveResource       of 'TKey * AsyncReplyChannel<Result<unit, exn>>
-    | TryGetResource       of 'TKey * AsyncReplyChannel<Result<'TResource option, exn>>
-    | TryGetResourceUnsafe of 'TKey * AsyncReplyChannel<Result<'TResource option, exn>>
-    | ReleaseResource      of 'TKey
-    | GetAllKeys           of AsyncReplyChannel<'TKey seq>
+type private CoordinatorMessage<'TKey, 'TResource when 'TKey : comparison> =
+    | AddResource           of 'TKey * 'TResource * AsyncReplyChannel<Result<unit, exn>>
+    | RemoveResource        of 'TKey * AsyncReplyChannel<Result<unit, exn>>
+    | TryGetResource        of 'TKey * AsyncReplyChannel<Result<'TResource option, exn>>
+    | TryGetResourceUnsafe  of 'TKey * AsyncReplyChannel<Result<'TResource option, exn>>
+    | ReleaseResource       of 'TKey
+    | GetAllKeys            of AsyncReplyChannel<'TKey seq>
+    | GetAllResourcesUnsafe of AsyncReplyChannel<Map<'TKey, 'TResource>>
     | Shutdown
 
 type private ResourceState<'TResource> = {
@@ -54,6 +55,9 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
             | GetAllKeys channel ->
                 channel.Reply(state.Resources.Keys)
                 return! nextMessage state
+
+            | GetAllResourcesUnsafe channel ->
+                channel.Reply(state.Resources |> Map.map (fun _ t -> t.Resource))
 
             | Shutdown when state.ShutdownRequested ->
                 return! nextMessage state
@@ -228,6 +232,10 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
 
     member _.GetAllKeys() = task {
         return! messageAgent.PostAndAsyncReply(GetAllKeys)
+        }
+
+    member _.GetAllResourcesUnsafe() = task {
+        return! messageAgent.PostAndAsyncReply(GetAllResourcesUnsafe)
         }
 
     interface IDisposable with

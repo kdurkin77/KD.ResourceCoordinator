@@ -13,11 +13,9 @@
     <PackageProjectUrl>https://github.com/kdurkin77/KD.ResourceCoordinator</PackageProjectUrl>
     <PackageTags>Resource; Coordinator</PackageTags>
     <PackageReleaseNotes>
-    Added .NET 7 support
-    Added options so that the wait for resource delay can be configurable and functions can be run on release, on add, on remove, and to destroy resources on shutdown
-    Added Use functions that return Task
+    Added function GetAllResourcesUnsafe. Bumping version to match framework
     </PackageReleaseNotes>
-    <Version>2.0.0</Version>
+    <Version>7.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
