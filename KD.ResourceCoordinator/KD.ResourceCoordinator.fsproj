@@ -13,9 +13,9 @@
     <PackageProjectUrl>https://github.com/kdurkin77/KD.ResourceCoordinator</PackageProjectUrl>
     <PackageTags>Resource; Coordinator</PackageTags>
     <PackageReleaseNotes>
-    Added function GetAllResourcesUnsafe. Bumping version to match framework
+    BUG FIX: not releasing the resource in UseUnsafe since it doesn't mark the resource in use
     </PackageReleaseNotes>
-    <Version>7.0.0</Version>
+    <Version>7.0.1</Version>
   </PropertyGroup>
 
   <ItemGroup>

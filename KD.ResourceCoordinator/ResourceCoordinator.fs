@@ -221,10 +221,7 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
             return raise exn
 
         | Ok resource ->
-            try
-                return! action resource
-            finally
-                releaseResouce key
+            return! action resource
         }
 
     member this.UseUnsafe(key, action) =
