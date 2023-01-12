@@ -58,6 +58,7 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
 
             | GetAllResourcesUnsafe channel ->
                 channel.Reply(state.Resources |> Map.map (fun _ t -> t.Resource))
+                return! nextMessage state
 
             | Shutdown when state.ShutdownRequested ->
                 return! nextMessage state
@@ -146,7 +147,7 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
 
 
     let rec acquireResource key getResource (cancellationToken: CancellationToken) = async {
-        match! getResource with
+        match! getResource() with
         | Ok None ->
             do! Async.Sleep waitForResourceDelay
             cancellationToken.ThrowIfCancellationRequested()
@@ -160,10 +161,10 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
         }
 
     let acquireResourceSafe key cancellationToken =
-        acquireResource key (messageAgent.PostAndAsyncReply(fun channel -> TryGetResource(key, channel))) cancellationToken
+        acquireResource key (fun () -> messageAgent.PostAndAsyncReply(fun channel -> TryGetResource(key, channel))) cancellationToken
 
     let acquireResourceUnsafe key cancellationToken =
-        acquireResource key (messageAgent.PostAndAsyncReply(fun channel -> TryGetResourceUnsafe(key, channel))) cancellationToken
+        acquireResource key (fun () -> messageAgent.PostAndAsyncReply(fun channel -> TryGetResourceUnsafe(key, channel))) cancellationToken
 
     let releaseResouce key =
         messageAgent.Post(ReleaseResource(key))
@@ -177,8 +178,8 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
             }
         :> Task
 
-    member _.Remove(key) = task {
-        match! acquireResourceSafe key CancellationToken.None with
+    member _.Remove(key, ct) = task {
+        match! acquireResourceSafe key ct with
         | Error exn ->
             return raise exn
 
@@ -193,6 +194,9 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
             | Ok () ->
                 return resource
         }
+
+    member this.Remove(key) = 
+        this.Remove(key, CancellationToken.None)
 
     member _.Use(key, action: Func<'TResource , CancellationToken, Task<'TResult>>, ct) = task {
         match! acquireResourceSafe key ct with
@@ -215,16 +219,22 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
     member this.Use(key, action: Func<'TResource , CancellationToken, Task>) =
         this.Use(key, action, CancellationToken.None)
 
-    member _.UseUnsafe(key, action, ct) = task {
+    member _.UseUnsafe(key, action: Func<'TResource, CancellationToken, Task<'TResult>>, ct) = task {
         match! acquireResourceUnsafe key ct with
         | Error exn ->
             return raise exn
 
         | Ok resource ->
-            return! action resource
+            return! action.Invoke(resource, ct)
         }
 
-    member this.UseUnsafe(key, action) =
+    member this.UseUnsafe(key, action: Func<'TResource, CancellationToken, Task<'TResult>>) =
+        this.UseUnsafe(key, action, CancellationToken.None)
+
+    member this.UseUnsafe(key, action: Func<'TResource, CancellationToken, Task>, ct) =
+        this.UseUnsafe(key, Func<_,_,_>(fun r ct -> task { return! action.Invoke(r, ct) }),  ct) :> Task
+
+    member this.UseUnsafe(key, action: Func<'TResource , CancellationToken, Task>) =
         this.UseUnsafe(key, action, CancellationToken.None)
 
     member _.GetAllKeys() = task {

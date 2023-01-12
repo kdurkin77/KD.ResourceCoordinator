@@ -13,9 +13,11 @@
     <PackageProjectUrl>https://github.com/kdurkin77/KD.ResourceCoordinator</PackageProjectUrl>
     <PackageTags>Resource; Coordinator</PackageTags>
     <PackageReleaseNotes>
-    BUG FIX: not releasing the resource in UseUnsafe since it doesn't mark the resource in use
-    </PackageReleaseNotes>
-    <Version>7.0.1</Version>
+		BUG FIX: GetAllResourcesUnsafe was causing the message loop to stop
+		BREAKING: Updated UseUnsafe's action parameter to be a Func and added overloads that handle both Task and Task with a return value with and without cancellation tokens
+		Added Remove overload that accepts a cancellation token
+	</PackageReleaseNotes>
+    <Version>7.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
