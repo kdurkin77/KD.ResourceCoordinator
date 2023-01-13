@@ -214,7 +214,7 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
         this.Use(key, action, CancellationToken.None)
 
     member this.Use(key, action: Func<'TResource , CancellationToken, Task>, ct) = 
-        this.Use(key, Func<_,_,_>(fun r ct -> task { return! action.Invoke(r, ct) }),  ct) :> Task
+        this.Use(key, Func<_,_,_>(fun r ct -> task { return! action.Invoke(r, ct) }), ct) :> Task
 
     member this.Use(key, action: Func<'TResource , CancellationToken, Task>) =
         this.Use(key, action, CancellationToken.None)
