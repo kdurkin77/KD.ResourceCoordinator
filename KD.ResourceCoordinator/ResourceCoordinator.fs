@@ -18,6 +18,7 @@ type ResourceCoordinatorOptions<'TKey, 'TResource>() =
 
 type private CoordinatorMessage<'TKey, 'TResource when 'TKey : comparison> =
     | AddResource           of 'TKey * 'TResource * AsyncReplyChannel<Result<unit, exn>>
+    | AddOrUpdateResource   of 'TKey * 'TResource * AsyncReplyChannel<Result<unit, exn>>
     | RemoveResource        of 'TKey * AsyncReplyChannel<Result<unit, exn>>
     | TryGetResource        of 'TKey * AsyncReplyChannel<Result<'TResource option, exn>>
     | TryGetResourceUnsafe  of 'TKey * AsyncReplyChannel<Result<'TResource option, exn>>
@@ -36,6 +37,8 @@ type private State<'TKey, 'TResource when 'TKey : comparison> = {
     Resources         : Map<'TKey, ResourceState<'TResource>>
     }
 
+type private Impossible = private Impossible of unit
+
 [<Sealed>]
 type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: ResourceCoordinatorOptions<'TKey, 'TResource> IOptions) =
 
@@ -50,7 +53,7 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
 
     let messageAgent = MailboxProcessor.Start(fun inbox ->
 
-        let rec nextMessage (state: State<'TKey, 'TResource>) = async {
+        let rec nextMessage (state: State<'TKey, 'TResource>): Async<Impossible> = async {
             match! inbox.Receive() with
             | GetAllKeys channel ->
                 channel.Reply(state.Resources.Keys)
@@ -63,24 +66,35 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
             | Shutdown when state.ShutdownRequested ->
                 return! nextMessage state
 
+            | AddOrUpdateResource (_, _, channel) | AddResource (_, _, channel) when state.ShutdownRequested ->
+                channel.Reply(try invalidOp $"%s{nameof ResourceCoordinator} Is Shutting Down" with ex -> Error ex)
+                return! nextMessage state
+
+            | RemoveResource _ | ReleaseResource _ when state.ShutdownRequested ->
+                return! nextMessage state
+
+            | TryGetResource (_, channel) | TryGetResourceUnsafe (_, channel)  when state.ShutdownRequested ->
+                channel.Reply(try invalidOp $"%s{nameof ResourceCoordinator} Is Shutting Down" with ex -> Error ex)
+                return! nextMessage state
+
             | Shutdown ->
                 if not (isNull options.Destroy) then
                     for item in state.Resources do
                         do! options.Destroy.Invoke(item.Value.Resource) |> Async.AwaitTask
                 return! nextMessage { state with Resources = Map.empty; ShutdownRequested = true }
 
-            | AddResource (_, _, channel) when state.ShutdownRequested ->
-                channel.Reply(try invalidOp $"%s{nameof ResourceCoordinator} Is Shutting Down" with ex -> Error ex)
-                return! nextMessage state
-
-            | AddResource (key, resource, channel) ->
+            | AddOrUpdateResource (key, resource, channel) ->
                 if not (isNull options.OnAdd) then
                     do! options.OnAdd.Invoke(key, resource) |> Async.AwaitTask
                 channel.Reply(Ok ())
                 return! nextMessage { state with Resources = state.Resources.Add(key, { InUse = false; Resource = resource }) }
 
-            | RemoveResource _ when state.ShutdownRequested ->
-                return! nextMessage state
+            | AddResource (key, resource, channel) ->
+                if state.Resources.ContainsKey key then
+                    channel.Reply(Error (failwith $"Resource already added"))
+                if not (isNull options.OnAdd) then
+                    do! options.OnAdd.Invoke(key, resource) |> Async.AwaitTask
+                return! nextMessage { state with Resources = state.Resources.Add(key, { InUse = false; Resource = resource }) }
 
             | RemoveResource (key, channel) ->
                 match state.Resources.TryFind(key) with
@@ -93,10 +107,6 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                         do! options.OnRemove.Invoke(key, _entry.Resource) |> Async.AwaitTask
                     channel.Reply(Ok ())
                     return! nextMessage { state with Resources = state.Resources.Remove(key) }
-
-            | TryGetResource (_, channel) when state.ShutdownRequested ->
-                channel.Reply(try invalidOp $"%s{nameof ResourceCoordinator} Is Shutting Down" with ex -> Error ex)
-                return! nextMessage state
 
             | TryGetResource (key, channel) ->
                 match state.Resources.TryFind(key) with
@@ -111,10 +121,6 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                 | Some entry ->
                     channel.Reply(Ok (Some entry.Resource))
                     return! nextMessage { state with Resources = state.Resources.Add(key, { entry with InUse = true }) }
-            
-            | TryGetResourceUnsafe (_, channel) when state.ShutdownRequested ->
-                channel.Reply(try invalidOp $"%s{nameof ResourceCoordinator} Is Shutting Down" with ex -> Error ex)
-                return! nextMessage state
 
             | TryGetResourceUnsafe (key, channel) ->
                 match state.Resources.TryFind(key) with
@@ -124,9 +130,6 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                 | Some entry ->
                     channel.Reply(Ok (Some entry.Resource))
 
-                return! nextMessage state
-
-            | ReleaseResource _ when state.ShutdownRequested ->
                 return! nextMessage state
 
             | ReleaseResource (key) ->
@@ -142,7 +145,7 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                     return! nextMessage state
             }
 
-        nextMessage { ShutdownRequested = false; Resources = Map.empty } 
+        nextMessage { ShutdownRequested = false; Resources = Map.empty } |> Async.Ignore
         )
 
 
@@ -170,6 +173,14 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
         messageAgent.Post(ReleaseResource(key))
 
 
+    member _.AddOrUpdate(key, resource) =
+        task {
+            match! messageAgent.PostAndAsyncReply(fun channel -> AddOrUpdateResource(key, resource, channel)) with
+            | Error exn -> raise exn
+            | Ok    ()  -> ()
+            }
+        :> Task
+
     member _.Add(key, resource) =
         task {
             match! messageAgent.PostAndAsyncReply(fun channel -> AddResource(key, resource, channel)) with
@@ -177,6 +188,12 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
             | Ok    ()  -> ()
             }
         :> Task
+
+    member _.TryAdd(key, resource) = task {
+        match! messageAgent.PostAndAsyncReply(fun channel -> AddResource(key, resource, channel)) with
+        | Error exn -> return false
+        | Ok    ()  -> return true
+        }
 
     member _.Remove(key, ct) = task {
         match! acquireResourceSafe key ct with

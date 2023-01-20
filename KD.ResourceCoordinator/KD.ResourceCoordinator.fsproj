@@ -13,11 +13,9 @@
     <PackageProjectUrl>https://github.com/kdurkin77/KD.ResourceCoordinator</PackageProjectUrl>
     <PackageTags>Resource; Coordinator</PackageTags>
     <PackageReleaseNotes>
-		BUG FIX: GetAllResourcesUnsafe was causing the message loop to stop
-		BREAKING: Updated UseUnsafe's action parameter to be a Func and added overloads that handle both Task and Task with a return value with and without cancellation tokens
-		Added Remove overload that accepts a cancellation token
+		***BREAKING CHANGES*** Changed Add to only add and not update anymore, added AddOrUpdate and TryAdd
 	</PackageReleaseNotes>
-    <Version>7.1.0</Version>
+    <Version>7.2.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
