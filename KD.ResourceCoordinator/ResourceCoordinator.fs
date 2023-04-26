@@ -323,8 +323,8 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
 
     member _.Use(key, action: Func<IResource<'TKey, 'TResource>, CancellationToken, Task<'TResult>>, cancellationToken) = task {
         throwIfDisposed ()
-        return! useResource key cancellationToken (fun resource -> async {
-            return! action.Invoke(resource, cancellationToken)
+        return! useResource key cancellationToken (fun iresource -> async {
+            return! action.Invoke(iresource, cancellationToken)
                     |> Async.AwaitTask
             })
         }
