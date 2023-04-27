@@ -231,7 +231,9 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                 | Some entry ->
                     match entry.Resource with
                     | None ->
-                        return failwith "derp" // do something?
+                        // this should never happen unless there is a bug in the lib
+                        channel.Reply(Error (SystemException()))
+                        return! nextMessage state
                     | Some _ ->
                         let syncId = Guid.NewGuid()
                         entry.SyncId <- Some syncId
