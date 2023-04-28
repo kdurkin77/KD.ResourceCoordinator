@@ -29,8 +29,8 @@ type private CoordinatorMessage<'TKey, 'TResource when 'TKey : comparison> =
     | TryGetResource        of 'TKey * AsyncReplyChannel<Result<(Guid * ResourceEntry<'TResource>) option, exn>>
     //| TryGetResourceUnsafe  of 'TKey * AsyncReplyChannel<Result<'TResource option, exn>>
     | ReleaseResource       of 'TKey * Guid
-    | GetAllKeys            of AsyncReplyChannel<Result<'TKey seq, exn>>
-    | GetAllResourcesUnsafe of AsyncReplyChannel<Result<Map<'TKey, 'TResource option>, exn>>
+    | GetAllKeys            of AsyncReplyChannel<Result<'TKey list, exn>>
+    | GetAllResourcesUnsafe of AsyncReplyChannel<Result<Map<'TKey, 'TResource>, exn>>
     | Shutdown
 
 
@@ -140,11 +140,27 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                 return! nextMessage { state with Resources = Map.empty; ShutdownRequested = true }
 
             | GetAllKeys channel ->
-                channel.Reply(Ok state.Resources.Keys)
+                let keys =
+                    state.Resources
+                    |> Seq.choose (fun kvp ->
+                        match kvp.Value.Resource with
+                        | None   -> None
+                        | Some _ -> Some kvp.Key
+                        )
+                    |> List.ofSeq
+                channel.Reply(Ok keys)
                 return! nextMessage state
 
             | GetAllResourcesUnsafe channel ->
-                channel.Reply(Ok (state.Resources |> Map.map (fun _ x -> x.Resource)))
+                let resources =
+                    state.Resources
+                    |> Seq.choose (fun kvp ->
+                        match kvp.Value.Resource with
+                        | None          -> None
+                        | Some resource -> Some (kvp.Key, resource)
+                        )
+                    |> Map
+                channel.Reply(Ok resources)
                 return! nextMessage state
 
             | AddResource (key, syncId, resource, channel) ->
