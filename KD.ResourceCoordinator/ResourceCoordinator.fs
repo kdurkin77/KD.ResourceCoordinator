@@ -27,7 +27,7 @@ type private CoordinatorMessage<'TKey, 'TResource when 'TKey : comparison> =
     | UpdateResource        of 'TKey * Guid * 'TResource * AsyncReplyChannel<Result<'TResource, exn>>
     | RemoveResource        of 'TKey * Guid * AsyncReplyChannel<Result<'TResource, exn>>
     | TryGetResource        of 'TKey * AsyncReplyChannel<Result<(Guid * ResourceEntry<'TResource>) option, exn>>
-    //| TryGetResourceUnsafe  of 'TKey * AsyncReplyChannel<Result<'TResource option, exn>>
+    | TryGetResourceUnsafe  of 'TKey * AsyncReplyChannel<Result<'TResource option, exn>>
     | ReleaseResource       of 'TKey * Guid
     | GetAllKeys            of AsyncReplyChannel<Result<'TKey list, exn>>
     | GetAllResourcesUnsafe of AsyncReplyChannel<Result<Map<'TKey, 'TResource>, exn>>
@@ -121,9 +121,8 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                 | RemoveResource        (_,_,   channel) -> channel.Reply(err ())
                 | GetAllKeys                    channel  -> channel.Reply(err ())
                 | GetAllResourcesUnsafe         channel  -> channel.Reply(err ())
-                | TryGetResource        (_,     channel)
-                //| TryGetResourceUnsafe  (_,   channel)
-                    -> channel.Reply(err ())
+                | TryGetResource        (_,     channel) -> channel.Reply(err ())
+                | TryGetResourceUnsafe  (_,     channel) -> channel.Reply(err ())
 
                 | ReleaseResource _
                 | Shutdown
@@ -183,7 +182,7 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                     | None ->
                         entry.Resource <- Some resource
                         do! onAdd key resource
-                        return! nextMessage state //{ state with Resources = state.Resources.Add(key, { entry with Resource = Some resource }) }
+                        return! nextMessage state
 
             | UpdateResource (key, syncId, resource, channel) ->
                 match state.Resources.TryFind(key) with
@@ -206,7 +205,7 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                         entry.Resource <- Some resource
                         do! onUpdate key resource
                         channel.Reply(Ok existing)
-                        return! nextMessage state //{ state with Resources = state.Resources.Add(key, { entry with Resource = Some resource }) }
+                        return! nextMessage state
 
             | RemoveResource (key, syncId, channel) ->
                 match state.Resources.TryFind(key) with
@@ -229,7 +228,7 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                         entry.Resource <- None
                         do! onRemove key existing
                         channel.Reply(Ok existing)
-                        return! nextMessage state //{ state with Resources = state.Resources.Add(key, { entry with Resource = None }) }
+                        return! nextMessage state
 
             | TryGetResource (key, channel) ->
                 match state.Resources.TryFind(key) with
@@ -254,17 +253,17 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                         let syncId = Guid.NewGuid()
                         entry.SyncId <- Some syncId
                         channel.Reply(Ok (Some (syncId, entry)))
-                        return! nextMessage state //{ state with Resources = state.Resources.Add(key, { entry with SyncId = Some syncId }) }
+                        return! nextMessage state
 
-            //| TryGetResourceUnsafe (key, channel) ->
-            //    match state.Resources.TryFind(key) with
-            //    | None ->
-            //        channel.Reply(Ok None)
+            | TryGetResourceUnsafe (key, channel) ->
+                match state.Resources.TryFind(key) with
+                | None ->
+                    channel.Reply(Ok None)
 
-            //    | Some entry ->
-            //        channel.Reply(Ok (Some entry.Resource))
+                | Some entry ->
+                    channel.Reply(Ok entry.Resource)
 
-            //    return! nextMessage state
+                return! nextMessage state
 
             | ReleaseResource (key, syncId) ->
                 match state.Resources.TryFind(key) with
@@ -284,7 +283,7 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                         return! nextMessage { state with Resources = state.Resources.Remove(key) }
                     | Some _ ->
                         entry.SyncId <- None
-                        return! nextMessage state //{ state with Resources = state.Resources.Add(key, { entry with SyncId = None }) }
+                        return! nextMessage state
             }
 
         nextMessage { ShutdownRequested = false; Resources = Map.empty } |> Async.Ignore
@@ -341,81 +340,39 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
 
     member _.Use(key, action: Func<IResource<'TKey, 'TResource>, CancellationToken, Task<'TResult>>, cancellationToken) = task {
         throwIfDisposed ()
-        return! useResource key cancellationToken (fun iresource -> async {
-            return! action.Invoke(iresource, cancellationToken)
-                    |> Async.AwaitTask
-            })
+        return! useResource key cancellationToken (fun iresource ->
+            action.Invoke(iresource, cancellationToken) |> Async.AwaitTask
+            )
         }
 
-    //member this.Use(key, action: Func<IResource<'TKey, 'TResource>, CancellationToken, Task<'TResult>>) = task {
-    //    throwIfDisposed ()
-    //    return! this.Use(key, action, CancellationToken.None)
-    //    }
-
-    member this.Use(key, action: Func<IResource<'TKey, 'TResource>, CancellationToken, Task>, cancellationToken) =
+    member _.Use(key, action: Func<IResource<'TKey, 'TResource>, CancellationToken, Task>, cancellationToken) =
         task {
             throwIfDisposed ()
-            do! this.Use(key, Func<_,_,_>(fun ir ct -> task { return! action.Invoke(ir, ct) }), cancellationToken)
+            do! useResource key cancellationToken (fun iresource ->
+                action.Invoke(iresource, cancellationToken) |> Async.AwaitTask
+                )
             }
         :> Task
 
-    //member this.Use(key, action: Func<IResource<'TKey, 'TResource>, CancellationToken, Task>) =
-    //    task {
-    //        throwIfDisposed ()
-    //        do! this.Use(key, action, CancellationToken.None)
-    //        }
-    //    :> Task
-
-    //member _.UseUnsafe(key, action: Func<'TResource, CancellationToken, Task<'TResult>>, cancellationToken) = task {
-    //    throwIfDisposed ()
-    //    match! messageAgent.PostAndAsyncReply(fun channel -> TryGetResourceUnsafe(key, channel)) with
-    //    | Error ex ->
-    //        return raise ex
-
-    //    | Ok None ->
-    //        return raise (KeyNotFoundException())
-
-    //    | Ok (Some resource) ->
-    //        return! action.Invoke(resource, cancellationToken)
-    //    }
-
-    //member this.UseUnsafe(key, action: Func<'TResource, CancellationToken, Task<'TResult>>) = task {
-    //    throwIfDisposed ()
-    //    return! this.UseUnsafe(key, action, CancellationToken.None)
-    //    }
-
-    //member this.UseUnsafe(key, action: Func<'TResource, CancellationToken, Task>, cancellationToken) =
-    //    task {
-    //        throwIfDisposed ()
-    //        return! this.UseUnsafe(key, Func<_,_,_>(fun r ct -> task { return! action.Invoke(r, ct) }),  cancellationToken)
-    //        }
-    //    :> Task
-
-    //member this.UseUnsafe(key, action: Func<'TResource , CancellationToken, Task>) =
-    //    task {
-    //        throwIfDisposed ()
-    //        return! this.UseUnsafe(key, action, CancellationToken.None)
-    //        }
-    //    :> Task
+    member _.TryGetResourceUnsafe(key) = task {
+        throwIfDisposed ()
+        match! messageAgent.PostAndAsyncReply(fun channel -> TryGetResourceUnsafe(key, channel)) with
+        | Error ex     -> return raise ex
+        | Ok resource' -> return resource'
+        }
 
     member _.GetAllKeys() = task {
         throwIfDisposed ()
         match! messageAgent.PostAndAsyncReply(GetAllKeys) with
-        | Error ex ->
-            return raise ex
-
-        | Ok keys ->
-            return keys
+        | Error ex -> return raise ex
+        | Ok keys  -> return keys
         }
 
     member _.GetAllResourcesUnsafe() = task {
         throwIfDisposed ()
         match! messageAgent.PostAndAsyncReply(GetAllResourcesUnsafe) with
-        | Error ex ->
-            return raise ex
-
-        | Ok resources ->
-            return resources
+        | Error ex     -> return raise ex
+        | Ok resources -> return resources
         }
 
     interface IDisposable with
@@ -424,46 +381,3 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                 messageAgent.Post(Shutdown)
                 disposed <- true
                 GC.SuppressFinalize(this)
-
-
-//member _.AddOrUpdate(key, resource) =
-//    task {
-//        throwIfDisposed ()
-//        match! messageAgent.PostAndAsyncReply(fun channel -> AddOrUpdateResource(key, resource, channel)) with
-//        | Error ex -> raise ex
-//        | Ok    () -> ()
-//        }
-//    :> Task
-
-//member _.Add(key, resource) =
-//    task {
-//        throwIfDisposed ()
-//        match! messageAgent.PostAndAsyncReply(fun channel -> AddResource(key, resource, channel)) with
-//        | Error ex -> raise ex
-//        | Ok    () -> ()
-//        }
-//    :> Task
-
-//member _.TryAdd(key, resource) = task {
-//    throwIfDisposed ()
-//    match! messageAgent.PostAndAsyncReply(fun channel -> AddResource(key, resource, channel)) with
-//    | Error _  -> return false
-//    | Ok    () -> return true
-//    }
-
-//member _.Remove(key, cancellationToken) = task {
-//    throwIfDisposed ()
-//    return! useResource key cancellationToken (fun resource -> async {
-//        match! messageAgent.PostAndAsyncReply(fun channel -> RemoveResource(key, channel)) with
-//        | Error ex ->
-//            return raise ex
-
-//        | Ok () ->
-//            return resource
-//        })
-//    }
-
-//member this.Remove(key) = task {
-//    throwIfDisposed ()
-//    return! this.Remove(key, CancellationToken.None)
-//    }
