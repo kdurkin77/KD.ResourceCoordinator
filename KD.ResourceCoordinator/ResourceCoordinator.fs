@@ -182,6 +182,7 @@ type ResourceCoordinator<'TKey, 'TResource when 'TKey : comparison>(options: Res
                     | None ->
                         entry.Resource <- Some resource
                         do! onAdd key resource
+                        channel.Reply(Ok ())
                         return! nextMessage state
 
             | UpdateResource (key, syncId, resource, channel) ->
