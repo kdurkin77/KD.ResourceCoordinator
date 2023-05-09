@@ -13,9 +13,12 @@
     <PackageProjectUrl>https://github.com/kdurkin77/KD.ResourceCoordinator</PackageProjectUrl>
     <PackageTags>Resource; Coordinator</PackageTags>
     <PackageReleaseNotes>
-		***BREAKING CHANGES*** Changed Add to only add and not update anymore, added AddOrUpdate and TryAdd
+        ***BREAKING CHANGES***
+        All actions must be done through the Use functions even if the resource doesn't exist, including adding resources
+        The action parameter in the Use functions take in an IResource
+        Added missing channel reply
 	</PackageReleaseNotes>
-    <Version>7.2.0</Version>
+    <Version>7.10.0-preview2</Version>
   </PropertyGroup>
 
   <ItemGroup>
