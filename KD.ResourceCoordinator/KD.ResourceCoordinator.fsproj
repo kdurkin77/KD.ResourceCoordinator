@@ -16,9 +16,8 @@
         ***BREAKING CHANGES***
         All actions must be done through the Use functions even if the resource doesn't exist, including adding resources
         The action parameter in the Use functions take in an IResource
-        Added missing channel reply
 	</PackageReleaseNotes>
-    <Version>7.10.0-preview2</Version>
+    <Version>7.10.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -33,11 +32,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Options" Version="7.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="7.0.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="FSharp.Core" Version="7.0.0" />
+    <PackageReference Update="FSharp.Core" Version="7.0.300" />
   </ItemGroup>
 	
 </Project>
